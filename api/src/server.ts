@@ -12,7 +12,6 @@ console.log(`
 📍 http://localhost:${PORT}
 🔑 JWT Auth enabled
 📦 SQLite database
-
 Ready to accept connections!
 `);
 
