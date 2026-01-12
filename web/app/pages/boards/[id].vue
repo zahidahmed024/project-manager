@@ -241,6 +241,12 @@ onMounted(loadBoard);
             <h3 class="column-title">{{ column.name }}</h3>
             <span class="column-count">{{ getTasksForColumn(column.name).length }}</span>
             <div class="column-actions">
+              <button class="btn btn-ghost btn-xs" @click="openTaskInColumn(column.name)" title="Add task">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
               <button class="btn btn-ghost btn-xs" @click="openEditColumnModal(column)" title="Edit column">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -529,9 +535,9 @@ onMounted(loadBoard);
 /* Kanban Board */
 .kanban-board {
   flex: 1;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  display: flex;
   gap: var(--space-4);
+  padding-bottom: var(--space-4); /* Add padding for scrollbar */
   min-height: 0;
   overflow-x: auto;
 }
@@ -543,6 +549,8 @@ onMounted(loadBoard);
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 320px; /* Fixed width for columns */
+  width: 320px;
 }
 
 .column-header {
