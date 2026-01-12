@@ -76,9 +76,14 @@ export const projectRepo = {
     stmt.run({ $projectId: projectId, $userId: userId });
   },
 
-  getMembers(projectId: number): ProjectMember[] {
-    const stmt = db.prepare("SELECT * FROM project_members WHERE project_id = $projectId");
-    return stmt.all({ $projectId: projectId }) as ProjectMember[];
+  getMembers(projectId: number): (ProjectMember & { name: string; email: string })[] {
+    const stmt = db.prepare(`
+      SELECT pm.project_id, pm.user_id, pm.role, u.name, u.email
+      FROM project_members pm
+      INNER JOIN users u ON pm.user_id = u.id
+      WHERE pm.project_id = $projectId
+    `);
+    return stmt.all({ $projectId: projectId }) as (ProjectMember & { name: string; email: string })[];
   },
 
   getMemberRole(projectId: number, userId: number): "admin" | "member" | null {

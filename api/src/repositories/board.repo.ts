@@ -1,4 +1,5 @@
 import { db } from "../db/client";
+import { columnRepo } from "./column.repo";
 
 export interface Board {
   id: number;
@@ -21,7 +22,12 @@ export const boardRepo = {
     });
     
     const lastId = db.query("SELECT last_insert_rowid() as id").get() as { id: number };
-    return this.findById(lastId.id)!;
+    const board = this.findById(lastId.id)!;
+    
+    // Create default columns for the new board
+    columnRepo.createDefaults(board.id);
+    
+    return board;
   },
 
   findById(id: number): Board | null {

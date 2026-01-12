@@ -8,6 +8,7 @@ import { projectRoutes } from "./routes/project.routes";
 import { boardRoutes } from "./routes/board.routes";
 import { taskRoutes } from "./routes/task.routes";
 import { labelRoutes } from "./routes/label.routes";
+import { success, error } from "./utils/response";
 
 const app = new Hono();
 
@@ -21,11 +22,11 @@ app.use("*", cors({
 
 // Health check
 app.get("/", (c) => {
-  return c.json({
+  return success(c, {
     name: "Mini Jira API",
     version: "1.0.0",
     status: "running",
-  });
+  }, "API is running");
 });
 
 // Routes
@@ -40,20 +41,20 @@ app.onError((err, c) => {
   console.error("Error:", err);
   
   if (err instanceof HTTPException) {
-    return c.json({ error: err.message }, err.status);
+    return error(c, err.message, err.status as 400 | 401 | 403 | 404 | 500);
   }
   
   // Zod validation errors
   if (err.name === "ZodError") {
-    return c.json({ error: "Validation error", details: err }, 400);
+    return error(c, "Validation error", 400);
   }
   
-  return c.json({ error: "Internal server error" }, 500);
+  return error(c, "Internal server error", 500);
 });
 
 // 404 handler
 app.notFound((c) => {
-  return c.json({ error: "Not found" }, 404);
+  return error(c, "Not found", 404);
 });
 
 export { app };

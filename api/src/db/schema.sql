@@ -42,6 +42,18 @@ CREATE TABLE IF NOT EXISTS boards (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+-- Board columns table (for dynamic Kanban columns)
+CREATE TABLE IF NOT EXISTS board_columns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    board_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    color TEXT DEFAULT '#6b7280',
+    position INTEGER DEFAULT 0,
+    FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_board_columns_board_id ON board_columns(board_id);
+
 -- Tasks table
 CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,7 +61,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     type TEXT NOT NULL CHECK (type IN ('issue', 'bugfix', 'story', 'subtask')),
     title TEXT NOT NULL,
     description TEXT,
-    status TEXT DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'done')),
+    status TEXT DEFAULT 'To Do',
     priority TEXT DEFAULT 'medium' CHECK (priority IN ('high', 'medium', 'low')),
     assignee_id INTEGER,
     reporter_id INTEGER NOT NULL,

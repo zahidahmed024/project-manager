@@ -4,6 +4,7 @@ import { z } from "zod";
 import { labelRepo } from "../repositories/label.repo";
 import { projectRepo } from "../repositories/project.repo";
 import { authMiddleware } from "../middlewares/auth";
+import { success, error } from "../utils/response";
 
 const labelRoutes = new Hono();
 
@@ -24,11 +25,11 @@ labelRoutes.get("/projects/:projectId/labels", (c) => {
   // Check membership
   const role = projectRepo.getMemberRole(projectId, user.id);
   if (!role) {
-    return c.json({ error: "Not a member of this project" }, 403);
+    return error(c, "Not a member of this project", 403);
   }
   
   const labels = labelRepo.findByProjectId(projectId);
-  return c.json({ labels });
+  return success(c, { labels }, "Labels retrieved successfully");
 });
 
 // POST /projects/:projectId/labels - Create label
@@ -40,7 +41,7 @@ labelRoutes.post("/projects/:projectId/labels", zValidator("json", createLabelSc
   // Check admin
   const role = projectRepo.getMemberRole(projectId, user.id);
   if (role !== "admin") {
-    return c.json({ error: "Project admin access required" }, 403);
+    return error(c, "Project admin access required", 403);
   }
   
   const label = labelRepo.create({
@@ -49,7 +50,7 @@ labelRoutes.post("/projects/:projectId/labels", zValidator("json", createLabelSc
     color: data.color,
   });
   
-  return c.json({ label }, 201);
+  return success(c, { label }, "Label created successfully", 201);
 });
 
 // PATCH /labels/:id - Update label
@@ -60,17 +61,17 @@ labelRoutes.patch("/labels/:id", zValidator("json", createLabelSchema.partial())
   
   const label = labelRepo.findById(labelId);
   if (!label) {
-    return c.json({ error: "Label not found" }, 404);
+    return error(c, "Label not found", 404);
   }
   
   // Check admin
   const role = projectRepo.getMemberRole(label.project_id, user.id);
   if (role !== "admin") {
-    return c.json({ error: "Project admin access required" }, 403);
+    return error(c, "Project admin access required", 403);
   }
   
   const updated = labelRepo.update(labelId, data);
-  return c.json({ label: updated });
+  return success(c, { label: updated }, "Label updated successfully");
 });
 
 // DELETE /labels/:id - Delete label
@@ -80,17 +81,17 @@ labelRoutes.delete("/labels/:id", (c) => {
   
   const label = labelRepo.findById(labelId);
   if (!label) {
-    return c.json({ error: "Label not found" }, 404);
+    return error(c, "Label not found", 404);
   }
   
   // Check admin
   const role = projectRepo.getMemberRole(label.project_id, user.id);
   if (role !== "admin") {
-    return c.json({ error: "Project admin access required" }, 403);
+    return error(c, "Project admin access required", 403);
   }
   
   labelRepo.delete(labelId);
-  return c.json({ message: "Label deleted successfully" });
+  return success(c, null, "Label deleted successfully");
 });
 
 export { labelRoutes };

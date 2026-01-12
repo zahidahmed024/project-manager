@@ -6,6 +6,7 @@ import { boardRepo } from "../repositories/board.repo";
 import { labelRepo } from "../repositories/label.repo";
 import { authMiddleware } from "../middlewares/auth";
 import { requireProjectAdmin, requireProjectMember } from "../middlewares/rbac";
+import { success, error } from "../utils/response";
 
 const projectRoutes = new Hono();
 
@@ -23,7 +24,7 @@ const createProjectSchema = z.object({
 projectRoutes.get("/", (c) => {
   const user = c.get("user");
   const projects = projectRepo.findByUserId(user.id);
-  return c.json({ projects });
+  return success(c, { projects }, "Projects retrieved successfully");
 });
 
 // POST /projects - Create project
@@ -34,7 +35,7 @@ projectRoutes.post("/", zValidator("json", createProjectSchema), (c) => {
   // Check if key already exists
   const existing = projectRepo.findByKey(data.key);
   if (existing) {
-    return c.json({ error: "Project key already exists" }, 400);
+    return error(c, "Project key already exists", 400);
   }
   
   const project = projectRepo.create({
@@ -47,7 +48,7 @@ projectRoutes.post("/", zValidator("json", createProjectSchema), (c) => {
   // Create default board
   boardRepo.create({ project_id: project.id, name: "Main Board" });
   
-  return c.json({ project }, 201);
+  return success(c, { project }, "Project created successfully", 201);
 });
 
 // GET /projects/:id - Get project details
@@ -56,14 +57,14 @@ projectRoutes.get("/:id", requireProjectMember, (c) => {
   const project = projectRepo.findById(projectId);
   
   if (!project) {
-    return c.json({ error: "Project not found" }, 404);
+    return error(c, "Project not found", 404);
   }
   
   const members = projectRepo.getMembers(projectId);
   const boards = boardRepo.findByProjectId(projectId);
   const labels = labelRepo.findByProjectId(projectId);
   
-  return c.json({ project, members, boards, labels });
+  return success(c, { project, members, boards, labels }, "Project retrieved successfully");
 });
 
 // PATCH /projects/:id - Update project
@@ -77,10 +78,10 @@ projectRoutes.patch("/:id", requireProjectAdmin, zValidator("json", z.object({
   const project = projectRepo.update(projectId, data);
   
   if (!project) {
-    return c.json({ error: "Project not found" }, 404);
+    return error(c, "Project not found", 404);
   }
   
-  return c.json({ project });
+  return success(c, { project }, "Project updated successfully");
 });
 
 // POST /projects/:id/members - Add member
@@ -93,7 +94,7 @@ projectRoutes.post("/:id/members", requireProjectAdmin, zValidator("json", z.obj
   
   projectRepo.addMember(projectId, user_id, role);
   
-  return c.json({ message: "Member added successfully" });
+  return success(c, null, "Member added successfully");
 });
 
 // DELETE /projects/:id/members/:userId - Remove member
@@ -103,12 +104,12 @@ projectRoutes.delete("/:id/members/:userId", requireProjectAdmin, (c) => {
   
   const project = projectRepo.findById(projectId);
   if (project && project.owner_id === userId) {
-    return c.json({ error: "Cannot remove project owner" }, 400);
+    return error(c, "Cannot remove project owner", 400);
   }
   
   projectRepo.removeMember(projectId, userId);
   
-  return c.json({ message: "Member removed successfully" });
+  return success(c, null, "Member removed successfully");
 });
 
 export { projectRoutes };

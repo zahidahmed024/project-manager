@@ -7,6 +7,7 @@ import { projectRepo } from "../repositories/project.repo";
 import { commentRepo } from "../repositories/comment.repo";
 import { labelRepo } from "../repositories/label.repo";
 import { authMiddleware } from "../middlewares/auth";
+import { success, error } from "../utils/response";
 
 const taskRoutes = new Hono();
 
@@ -51,11 +52,11 @@ taskRoutes.get("/boards/:boardId/tasks", (c) => {
   const boardId = parseInt(c.req.param("boardId"));
   
   const { board, role } = checkBoardAccess(boardId, user.id);
-  if (!board) return c.json({ error: "Board not found" }, 404);
-  if (!role) return c.json({ error: "Not a member of this project" }, 403);
+  if (!board) return error(c, "Board not found", 404);
+  if (!role) return error(c, "Not a member of this project", 403);
   
   const tasks = taskRepo.findByBoardId(boardId);
-  return c.json({ tasks });
+  return success(c, { tasks }, "Tasks retrieved successfully");
 });
 
 // POST /boards/:boardId/tasks - Create task
@@ -65,8 +66,8 @@ taskRoutes.post("/boards/:boardId/tasks", zValidator("json", createTaskSchema), 
   const data = c.req.valid("json");
   
   const { board, role } = checkBoardAccess(boardId, user.id);
-  if (!board) return c.json({ error: "Board not found" }, 404);
-  if (!role) return c.json({ error: "Not a member of this project" }, 403);
+  if (!board) return error(c, "Board not found", 404);
+  if (!role) return error(c, "Not a member of this project", 403);
   
   const task = taskRepo.create({
     board_id: boardId,
@@ -80,7 +81,7 @@ taskRoutes.post("/boards/:boardId/tasks", zValidator("json", createTaskSchema), 
     deadline: data.deadline,
   });
   
-  return c.json({ task }, 201);
+  return success(c, { task }, "Task created successfully", 201);
 });
 
 // GET /tasks/:id - Get task with subtasks and labels
@@ -89,15 +90,15 @@ taskRoutes.get("/tasks/:id", (c) => {
   const taskId = parseInt(c.req.param("id"));
   
   const task = taskRepo.findByIdWithLabels(taskId);
-  if (!task) return c.json({ error: "Task not found" }, 404);
+  if (!task) return error(c, "Task not found", 404);
   
   const { role } = checkBoardAccess(task.board_id, user.id);
-  if (!role) return c.json({ error: "Not a member of this project" }, 403);
+  if (!role) return error(c, "Not a member of this project", 403);
   
   const subtasks = taskRepo.getSubtasks(taskId);
   const comments = commentRepo.findByTaskId(taskId);
   
-  return c.json({ task, subtasks, comments });
+  return success(c, { task, subtasks, comments }, "Task retrieved successfully");
 });
 
 // PATCH /tasks/:id - Update task
@@ -107,13 +108,13 @@ taskRoutes.patch("/tasks/:id", zValidator("json", updateTaskSchema), (c) => {
   const data = c.req.valid("json");
   
   const task = taskRepo.findById(taskId);
-  if (!task) return c.json({ error: "Task not found" }, 404);
+  if (!task) return error(c, "Task not found", 404);
   
   const { role } = checkBoardAccess(task.board_id, user.id);
-  if (!role) return c.json({ error: "Not a member of this project" }, 403);
+  if (!role) return error(c, "Not a member of this project", 403);
   
   const updated = taskRepo.update(taskId, data);
-  return c.json({ task: updated });
+  return success(c, { task: updated }, "Task updated successfully");
 });
 
 // DELETE /tasks/:id - Delete task
@@ -122,18 +123,18 @@ taskRoutes.delete("/tasks/:id", (c) => {
   const taskId = parseInt(c.req.param("id"));
   
   const task = taskRepo.findById(taskId);
-  if (!task) return c.json({ error: "Task not found" }, 404);
+  if (!task) return error(c, "Task not found", 404);
   
-  const { board, role } = checkBoardAccess(task.board_id, user.id);
-  if (!role) return c.json({ error: "Not a member of this project" }, 403);
+  const { role } = checkBoardAccess(task.board_id, user.id);
+  if (!role) return error(c, "Not a member of this project", 403);
   
   // Only admin or reporter can delete
   if (role !== "admin" && task.reporter_id !== user.id) {
-    return c.json({ error: "Only admin or task creator can delete" }, 403);
+    return error(c, "Only admin or task creator can delete", 403);
   }
   
   taskRepo.delete(taskId);
-  return c.json({ message: "Task deleted successfully" });
+  return success(c, null, "Task deleted successfully");
 });
 
 // POST /tasks/:id/subtasks - Create subtask
@@ -143,10 +144,10 @@ taskRoutes.post("/tasks/:id/subtasks", zValidator("json", createTaskSchema.omit(
   const data = c.req.valid("json");
   
   const parent = taskRepo.findById(parentId);
-  if (!parent) return c.json({ error: "Parent task not found" }, 404);
+  if (!parent) return error(c, "Parent task not found", 404);
   
   const { role } = checkBoardAccess(parent.board_id, user.id);
-  if (!role) return c.json({ error: "Not a member of this project" }, 403);
+  if (!role) return error(c, "Not a member of this project", 403);
   
   const subtask = taskRepo.create({
     board_id: parent.board_id,
@@ -161,7 +162,7 @@ taskRoutes.post("/tasks/:id/subtasks", zValidator("json", createTaskSchema.omit(
     deadline: data.deadline,
   });
   
-  return c.json({ subtask }, 201);
+  return success(c, { subtask }, "Subtask created successfully", 201);
 });
 
 // POST /tasks/:id/labels/:labelId - Add label to task
@@ -171,13 +172,13 @@ taskRoutes.post("/tasks/:id/labels/:labelId", (c) => {
   const labelId = parseInt(c.req.param("labelId"));
   
   const task = taskRepo.findById(taskId);
-  if (!task) return c.json({ error: "Task not found" }, 404);
+  if (!task) return error(c, "Task not found", 404);
   
   const { role } = checkBoardAccess(task.board_id, user.id);
-  if (!role) return c.json({ error: "Not a member of this project" }, 403);
+  if (!role) return error(c, "Not a member of this project", 403);
   
   labelRepo.addToTask(taskId, labelId);
-  return c.json({ message: "Label added" });
+  return success(c, null, "Label added successfully");
 });
 
 // DELETE /tasks/:id/labels/:labelId - Remove label from task
@@ -187,13 +188,13 @@ taskRoutes.delete("/tasks/:id/labels/:labelId", (c) => {
   const labelId = parseInt(c.req.param("labelId"));
   
   const task = taskRepo.findById(taskId);
-  if (!task) return c.json({ error: "Task not found" }, 404);
+  if (!task) return error(c, "Task not found", 404);
   
   const { role } = checkBoardAccess(task.board_id, user.id);
-  if (!role) return c.json({ error: "Not a member of this project" }, 403);
+  if (!role) return error(c, "Not a member of this project", 403);
   
   labelRepo.removeFromTask(taskId, labelId);
-  return c.json({ message: "Label removed" });
+  return success(c, null, "Label removed successfully");
 });
 
 // GET /tasks/:id/comments - List comments
@@ -202,13 +203,13 @@ taskRoutes.get("/tasks/:id/comments", (c) => {
   const taskId = parseInt(c.req.param("id"));
   
   const task = taskRepo.findById(taskId);
-  if (!task) return c.json({ error: "Task not found" }, 404);
+  if (!task) return error(c, "Task not found", 404);
   
   const { role } = checkBoardAccess(task.board_id, user.id);
-  if (!role) return c.json({ error: "Not a member of this project" }, 403);
+  if (!role) return error(c, "Not a member of this project", 403);
   
   const comments = commentRepo.findByTaskId(taskId);
-  return c.json({ comments });
+  return success(c, { comments }, "Comments retrieved successfully");
 });
 
 // POST /tasks/:id/comments - Add comment
@@ -220,10 +221,10 @@ taskRoutes.post("/tasks/:id/comments", zValidator("json", z.object({
   const { content } = c.req.valid("json");
   
   const task = taskRepo.findById(taskId);
-  if (!task) return c.json({ error: "Task not found" }, 404);
+  if (!task) return error(c, "Task not found", 404);
   
   const { role } = checkBoardAccess(task.board_id, user.id);
-  if (!role) return c.json({ error: "Not a member of this project" }, 403);
+  if (!role) return error(c, "Not a member of this project", 403);
   
   const comment = commentRepo.create({
     task_id: taskId,
@@ -231,7 +232,7 @@ taskRoutes.post("/tasks/:id/comments", zValidator("json", z.object({
     content,
   });
   
-  return c.json({ comment }, 201);
+  return success(c, { comment }, "Comment added successfully", 201);
 });
 
 export { taskRoutes };
