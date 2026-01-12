@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun run --watch src/server.ts",
     "start": "bun run src/server.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "db:clean": "rm data/mini-jira.db"
   },
   "devDependencies": {
     "@types/bun": "latest",

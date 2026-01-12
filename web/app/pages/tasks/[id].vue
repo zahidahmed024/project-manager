@@ -36,7 +36,7 @@ const priorityColors = {
   low: "badge-priority-low",
 };
 
-const statusColors = {
+const statusColors: Record<string, string> = {
   todo: "badge-status-todo",
   in_progress: "badge-status-in-progress",
   done: "badge-status-done",
@@ -66,7 +66,7 @@ const startEditing = () => {
   if (taskData.value) {
     editForm.title = taskData.value.task.title;
     editForm.description = taskData.value.task.description || "";
-    editForm.status = taskData.value.task.status;
+    editForm.status = taskData.value.task.status as "todo" | "in_progress" | "done";
     editForm.priority = taskData.value.task.priority;
     isEditing.value = true;
   }

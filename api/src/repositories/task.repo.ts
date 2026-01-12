@@ -1,7 +1,7 @@
 import { db } from "../db/client";
 
 export type TaskType = "issue" | "bugfix" | "story" | "subtask";
-export type TaskStatus = "todo" | "in_progress" | "done";
+export type TaskStatus = string;
 export type TaskPriority = "high" | "medium" | "low";
 
 export interface Task {

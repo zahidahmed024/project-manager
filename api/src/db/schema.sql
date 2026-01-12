@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     type TEXT NOT NULL CHECK (type IN ('issue', 'bugfix', 'story', 'subtask')),
     title TEXT NOT NULL,
     description TEXT,
-    status TEXT DEFAULT 'To Do',
+    status TEXT DEFAULT 'todo',
     priority TEXT DEFAULT 'medium' CHECK (priority IN ('high', 'medium', 'low')),
     assignee_id INTEGER,
     reporter_id INTEGER NOT NULL,

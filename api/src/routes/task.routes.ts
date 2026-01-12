@@ -19,7 +19,7 @@ const createTaskSchema = z.object({
   type: z.enum(["issue", "bugfix", "story", "subtask"]),
   title: z.string().min(1),
   description: z.string().optional(),
-  status: z.enum(["todo", "in_progress", "done"]).default("todo"),
+  status: z.string().default("todo"), // Changed to string for dynamic columns
   priority: z.enum(["high", "medium", "low"]).default("medium"),
   assignee_id: z.number().optional(),
   deadline: z.string().optional(),
@@ -29,7 +29,7 @@ const createTaskSchema = z.object({
 const updateTaskSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional(),
-  status: z.enum(["todo", "in_progress", "done"]).optional(),
+  status: z.string().optional(), // Changed to string for dynamic columns
   priority: z.enum(["high", "medium", "low"]).optional(),
   assignee_id: z.number().nullable().optional(),
   deadline: z.string().nullable().optional(),
