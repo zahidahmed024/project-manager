@@ -30,221 +30,222 @@ const reorderColumnsSchema = z.object({
 });
 
 // GET /projects/:projectId/boards - List boards for project
-boardRoutes.get("/projects/:projectId/boards", (c) => {
+boardRoutes.get("/projects/:projectId/boards", async (c) => {
   const user = c.get("user");
   const projectId = parseInt(c.req.param("projectId"));
   
   // Check membership
-  const role = projectRepo.getMemberRole(projectId, user.id);
+  const role = await projectRepo.getMemberRole(projectId, user.id);
   if (!role) {
     return error(c, "Not a member of this project", 403);
   }
   
-  const boards = boardRepo.findByProjectId(projectId);
+  const boards = await boardRepo.findByProjectId(projectId);
   return success(c, { boards }, "Boards retrieved successfully");
 });
 
 // POST /projects/:projectId/boards - Create board
-boardRoutes.post("/projects/:projectId/boards", zValidator("json", createBoardSchema), (c) => {
+boardRoutes.post("/projects/:projectId/boards", zValidator("json", createBoardSchema), async (c) => {
   const user = c.get("user");
   const projectId = parseInt(c.req.param("projectId"));
   const { name } = c.req.valid("json");
   
   // Check membership
-  const role = projectRepo.getMemberRole(projectId, user.id);
+  const role = await projectRepo.getMemberRole(projectId, user.id);
   if (!role) {
     return error(c, "Not a member of this project", 403);
   }
   
-  const board = boardRepo.create({ project_id: projectId, name });
+  const board = await boardRepo.create({ project_id: projectId, name });
   return success(c, { board }, "Board created successfully", 201);
 });
 
 // GET /boards/:id - Get board with columns and tasks
-boardRoutes.get("/boards/:id", (c) => {
+boardRoutes.get("/boards/:id", async (c) => {
   const user = c.get("user");
   const boardId = parseInt(c.req.param("id"));
   
-  const board = boardRepo.findById(boardId);
+  const board = await boardRepo.findById(boardId);
   if (!board) {
     return error(c, "Board not found", 404);
   }
   
   // Check project membership
-  const role = projectRepo.getMemberRole(board.project_id, user.id);
+  const role = await projectRepo.getMemberRole(board.project_id, user.id);
   if (!role) {
     return error(c, "Not a member of this project", 403);
   }
   
-  const columns = columnRepo.findByBoardId(boardId);
-  const tasks = taskRepo.findByBoardId(boardId);
+  const columns = await columnRepo.findByBoardId(boardId);
+  const tasks = await taskRepo.findByBoardId(boardId);
   
   // Get subtasks for each task
-  const tasksWithSubtasks = tasks.map(task => ({
-    ...task,
-    subtasks: taskRepo.getSubtasks(task.id),
-  }));
+  const tasksWithSubtasks = await Promise.all(
+    tasks.map(async (task) => ({
+      ...task,
+      subtasks: await taskRepo.getSubtasks(task.id),
+    }))
+  );
   
   return success(c, { board, columns, tasks: tasksWithSubtasks }, "Board retrieved successfully");
 });
 
 // PATCH /boards/:id - Update board
-boardRoutes.patch("/boards/:id", zValidator("json", createBoardSchema), (c) => {
+boardRoutes.patch("/boards/:id", zValidator("json", createBoardSchema), async (c) => {
   const user = c.get("user");
   const boardId = parseInt(c.req.param("id"));
   const { name } = c.req.valid("json");
   
-  const board = boardRepo.findById(boardId);
+  const board = await boardRepo.findById(boardId);
   if (!board) {
     return error(c, "Board not found", 404);
   }
   
   // Check project admin
-  const role = projectRepo.getMemberRole(board.project_id, user.id);
+  const role = await projectRepo.getMemberRole(board.project_id, user.id);
   if (role !== "admin") {
     return error(c, "Project admin access required", 403);
   }
   
-  const updated = boardRepo.update(boardId, name);
+  const updated = await boardRepo.update(boardId, name);
   return success(c, { board: updated }, "Board updated successfully");
 });
 
 // DELETE /boards/:id - Delete board
-boardRoutes.delete("/boards/:id", (c) => {
+boardRoutes.delete("/boards/:id", async (c) => {
   const user = c.get("user");
   const boardId = parseInt(c.req.param("id"));
   
-  const board = boardRepo.findById(boardId);
+  const board = await boardRepo.findById(boardId);
   if (!board) {
     return error(c, "Board not found", 404);
   }
   
   // Check project admin
-  const role = projectRepo.getMemberRole(board.project_id, user.id);
+  const role = await projectRepo.getMemberRole(board.project_id, user.id);
   if (role !== "admin") {
     return error(c, "Project admin access required", 403);
   }
   
-  boardRepo.delete(boardId);
+  await boardRepo.delete(boardId);
   return success(c, null, "Board deleted successfully");
 });
 
 // ========== Column Routes ==========
 
 // GET /boards/:boardId/columns - List columns for board
-boardRoutes.get("/boards/:boardId/columns", (c) => {
+boardRoutes.get("/boards/:boardId/columns", async (c) => {
   const user = c.get("user");
   const boardId = parseInt(c.req.param("boardId"));
   
-  const board = boardRepo.findById(boardId);
+  const board = await boardRepo.findById(boardId);
   if (!board) {
     return error(c, "Board not found", 404);
   }
   
-  const role = projectRepo.getMemberRole(board.project_id, user.id);
+  const role = await projectRepo.getMemberRole(board.project_id, user.id);
   if (!role) {
     return error(c, "Not a member of this project", 403);
   }
   
-  const columns = columnRepo.findByBoardId(boardId);
+  const columns = await columnRepo.findByBoardId(boardId);
   return success(c, { columns }, "Columns retrieved successfully");
 });
 
 // POST /boards/:boardId/columns - Create column
-boardRoutes.post("/boards/:boardId/columns", zValidator("json", createColumnSchema), (c) => {
+boardRoutes.post("/boards/:boardId/columns", zValidator("json", createColumnSchema), async (c) => {
   const user = c.get("user");
   const boardId = parseInt(c.req.param("boardId"));
   const { name, color } = c.req.valid("json");
   
-  const board = boardRepo.findById(boardId);
+  const board = await boardRepo.findById(boardId);
   if (!board) {
     return error(c, "Board not found", 404);
   }
   
-  const role = projectRepo.getMemberRole(board.project_id, user.id);
+  const role = await projectRepo.getMemberRole(board.project_id, user.id);
   if (!role) {
     return error(c, "Not a member of this project", 403);
   }
   
-  const column = columnRepo.create({ board_id: boardId, name, color });
+  const column = await columnRepo.create({ board_id: boardId, name, color });
   return success(c, { column }, "Column created successfully", 201);
 });
 
 // PATCH /columns/:id - Update column
-boardRoutes.patch("/columns/:id", zValidator("json", createColumnSchema.partial()), (c) => {
+boardRoutes.patch("/columns/:id", zValidator("json", createColumnSchema.partial()), async (c) => {
   const user = c.get("user");
   const columnId = parseInt(c.req.param("id"));
   const data = c.req.valid("json");
   
-  const column = columnRepo.findById(columnId);
+  const column = await columnRepo.findById(columnId);
   if (!column) {
     return error(c, "Column not found", 404);
   }
   
-  const board = boardRepo.findById(column.board_id);
+  const board = await boardRepo.findById(column.board_id);
   if (!board) {
     return error(c, "Board not found", 404);
   }
   
-  const role = projectRepo.getMemberRole(board.project_id, user.id);
+  const role = await projectRepo.getMemberRole(board.project_id, user.id);
   if (!role) {
     return error(c, "Not a member of this project", 403);
   }
   
-  const updated = columnRepo.update(columnId, data);
+  const updated = await columnRepo.update(columnId, data);
   return success(c, { column: updated }, "Column updated successfully");
 });
 
 // DELETE /columns/:id - Delete column
-boardRoutes.delete("/columns/:id", (c) => {
+boardRoutes.delete("/columns/:id", async (c) => {
   const user = c.get("user");
   const columnId = parseInt(c.req.param("id"));
   
-  const column = columnRepo.findById(columnId);
+  const column = await columnRepo.findById(columnId);
   if (!column) {
     return error(c, "Column not found", 404);
   }
   
-  const board = boardRepo.findById(column.board_id);
+  const board = await boardRepo.findById(column.board_id);
   if (!board) {
     return error(c, "Board not found", 404);
   }
   
-  const role = projectRepo.getMemberRole(board.project_id, user.id);
+  const role = await projectRepo.getMemberRole(board.project_id, user.id);
   if (!role) {
     return error(c, "Not a member of this project", 403);
   }
   
   // Check if this is the only column
-  const columns = columnRepo.findByBoardId(board.id);
+  const columns = await columnRepo.findByBoardId(board.id);
   if (columns.length <= 1) {
     return error(c, "Cannot delete the only column", 400);
   }
   
-  columnRepo.delete(columnId);
+  await columnRepo.delete(columnId);
   return success(c, null, "Column deleted successfully");
 });
 
 // PATCH /boards/:boardId/columns/reorder - Reorder columns
-boardRoutes.patch("/boards/:boardId/columns/reorder", zValidator("json", reorderColumnsSchema), (c) => {
+boardRoutes.patch("/boards/:boardId/columns/reorder", zValidator("json", reorderColumnsSchema), async (c) => {
   const user = c.get("user");
   const boardId = parseInt(c.req.param("boardId"));
   const { columnIds } = c.req.valid("json");
   
-  const board = boardRepo.findById(boardId);
+  const board = await boardRepo.findById(boardId);
   if (!board) {
     return error(c, "Board not found", 404);
   }
   
-  const role = projectRepo.getMemberRole(board.project_id, user.id);
+  const role = await projectRepo.getMemberRole(board.project_id, user.id);
   if (!role) {
     return error(c, "Not a member of this project", 403);
   }
   
-  columnRepo.reorder(boardId, columnIds);
-  const columns = columnRepo.findByBoardId(boardId);
+  await columnRepo.reorder(boardId, columnIds);
+  const columns = await columnRepo.findByBoardId(boardId);
   return success(c, { columns }, "Columns reordered successfully");
 });
 
 export { boardRoutes };
-

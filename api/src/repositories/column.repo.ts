@@ -1,104 +1,117 @@
 import { db } from "../db/client";
+import type { BoardColumn } from "../db/types";
 
-export interface BoardColumn {
-  id: number;
+export type { BoardColumn };
+
+export type BoardColumnCreate = {
   board_id: number;
   name: string;
-  color: string;
-  position: number;
-}
-
-export type BoardColumnCreate = Pick<BoardColumn, "board_id" | "name"> & {
   color?: string;
   position?: number;
 };
 
 export const columnRepo = {
-  create(data: BoardColumnCreate): BoardColumn {
+  async create(data: BoardColumnCreate): Promise<BoardColumn> {
     // Get max position for this board
-    const maxPos = db.query(
-      "SELECT COALESCE(MAX(position), -1) as max_pos FROM board_columns WHERE board_id = $boardId"
-    ).get({ $boardId: data.board_id }) as { max_pos: number };
-    
-    const position = data.position ?? maxPos.max_pos + 1;
-    
-    const stmt = db.prepare(`
-      INSERT INTO board_columns (board_id, name, color, position)
-      VALUES ($board_id, $name, $color, $position)
-    `);
-    stmt.run({
-      $board_id: data.board_id,
-      $name: data.name,
-      $color: data.color || "#6b7280",
-      $position: position,
-    });
-    
-    const lastId = db.query("SELECT last_insert_rowid() as id").get() as { id: number };
-    return this.findById(lastId.id)!;
-  },
+    const maxPosResult = await db
+      .selectFrom("board_columns")
+      .select(db.fn.max("position").as("max_pos"))
+      .where("board_id", "=", data.board_id)
+      .executeTakeFirst();
 
-  findById(id: number): BoardColumn | null {
-    const stmt = db.prepare("SELECT * FROM board_columns WHERE id = $id");
-    return stmt.get({ $id: id }) as BoardColumn | null;
-  },
+    const position = data.position ?? ((maxPosResult?.max_pos ?? -1) + 1);
 
-  findByBoardId(boardId: number): BoardColumn[] {
-    const stmt = db.prepare(
-      "SELECT * FROM board_columns WHERE board_id = $boardId ORDER BY position ASC"
-    );
-    return stmt.all({ $boardId: boardId }) as BoardColumn[];
-  },
+    const result = await db
+      .insertInto("board_columns")
+      .values({
+        board_id: data.board_id,
+        name: data.name,
+        color: data.color || "#6b7280",
+        position: position,
+      })
+      .returningAll()
+      .executeTakeFirst();
 
-  update(id: number, data: Partial<Pick<BoardColumn, "name" | "color">>): BoardColumn | null {
-    const updates: string[] = [];
-    const params: Record<string, unknown> = { $id: id };
-    
-    if (data.name !== undefined) {
-      updates.push("name = $name");
-      params.$name = data.name;
+    if (!result) {
+      const lastId = await db
+        .selectFrom("board_columns")
+        .select(db.fn.max("id").as("id"))
+        .executeTakeFirst();
+      return (await this.findById(lastId?.id ?? 0))!;
     }
-    if (data.color !== undefined) {
-      updates.push("color = $color");
-      params.$color = data.color;
+
+    return result;
+  },
+
+  async findById(id: number): Promise<BoardColumn | null> {
+    const result = await db
+      .selectFrom("board_columns")
+      .selectAll()
+      .where("id", "=", id)
+      .executeTakeFirst();
+
+    return result ?? null;
+  },
+
+  async findByBoardId(boardId: number): Promise<BoardColumn[]> {
+    return await db
+      .selectFrom("board_columns")
+      .selectAll()
+      .where("board_id", "=", boardId)
+      .orderBy("position", "asc")
+      .execute();
+  },
+
+  async update(id: number, data: Partial<Pick<BoardColumn, "name" | "color">>): Promise<BoardColumn | null> {
+    if (Object.keys(data).length === 0) {
+      return this.findById(id);
     }
-    
-    if (updates.length === 0) return this.findById(id);
-    
-    const stmt = db.prepare(`UPDATE board_columns SET ${updates.join(", ")} WHERE id = $id`);
-    stmt.run(params as Parameters<typeof stmt.run>[0]);
-    
+
+    await db
+      .updateTable("board_columns")
+      .set(data)
+      .where("id", "=", id)
+      .execute();
+
     return this.findById(id);
   },
 
-  delete(id: number): void {
-    const stmt = db.prepare("DELETE FROM board_columns WHERE id = $id");
-    stmt.run({ $id: id });
+  async delete(id: number): Promise<void> {
+    await db.deleteFrom("board_columns").where("id", "=", id).execute();
   },
 
-  reorder(boardId: number, columnIds: number[]): void {
-    columnIds.forEach((id, index) => {
-      const stmt = db.prepare(
-        "UPDATE board_columns SET position = $position WHERE id = $id AND board_id = $boardId"
-      );
-      stmt.run({ $position: index, $id: id, $boardId: boardId });
-    });
+  async reorder(boardId: number, columnIds: number[]): Promise<void> {
+    for (let index = 0; index < columnIds.length; index++) {
+      const columnId = columnIds[index]!;
+      await db
+        .updateTable("board_columns")
+        .set({ position: index })
+        .where("id", "=", columnId)
+        .where("board_id", "=", boardId)
+        .execute();
+    }
   },
 
   // Create default columns for a new board
-  createDefaults(boardId: number): BoardColumn[] {
+  async createDefaults(boardId: number): Promise<BoardColumn[]> {
     const defaults = [
       { name: "To Do", color: "#6b7280" },
       { name: "In Progress", color: "#f59e0b" },
       { name: "Done", color: "#10b981" },
     ];
-    
-    return defaults.map((col, index) => 
-      this.create({ 
-        board_id: boardId, 
-        name: col.name, 
-        color: col.color, 
-        position: index 
-      })
-    );
+
+    const columns: BoardColumn[] = [];
+    for (let i = 0; i < defaults.length; i++) {
+      const defaultCol = defaults[i]!;
+      const col = await this.create({
+        board_id: boardId,
+        name: defaultCol.name,
+        color: defaultCol.color,
+        position: i,
+      });
+      columns.push(col);
+    }
+
+    return columns;
   },
 };

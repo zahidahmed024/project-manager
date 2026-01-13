@@ -1,0 +1,67 @@
+services:
+  # Database Service (PostgreSQL)
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-mini_jira}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Initialize schema on first start
+      - ./api/src/db/schema.postgres.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5433:5432"
+    networks:
+      - app-network
+
+  # API Service (Bun)
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      # Database connection
+      DB_TYPE: postgres
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DATABASE: ${POSTGRES_DB:-mini_jira}
+      PG_USER: ${POSTGRES_USER:-postgres}
+      PG_PASSWORD: ${POSTGRES_PASSWORD:-password}
+
+      # App settings
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET:-supersecretkeyCHANGE_ME_IN_PROD}
+    ports:
+      - "3001:3000"
+    depends_on:
+      - postgres
+    networks:
+      - app-network
+
+  # Web Service (Nuxt)
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      # Connect to API locally via internal network for SSR
+      NUXT_API_BASE_URL: http://api:3000/api
+      # Public URL for client-side requests (browser)
+      NUXT_PUBLIC_API_BASE: http://localhost:3001/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    networks:
+      - app-network
+
+volumes:
+  postgres_data:
+
+networks:
+  app-network:
+    driver: bridge

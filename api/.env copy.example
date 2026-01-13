@@ -1,0 +1,17 @@
+# Database configuration
+DB_TYPE=postgres              # Options: sqlite, postgres, mysql
+DB_PATH=./data/mini-jira.db # For SQLite only
+
+# PostgreSQL (if DB_TYPE=postgres)
+PG_HOST=localhost
+PG_PORT=5432
+PG_DATABASE=mini_jira
+PG_USER=postgres
+PG_PASSWORD=password
+
+# MySQL (if DB_TYPE=mysql)
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_DATABASE=mini_jira
+MYSQL_USER=root
+MYSQL_PASSWORD=password

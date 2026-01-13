@@ -21,24 +21,24 @@ const createProjectSchema = z.object({
 });
 
 // GET /projects - List user's projects
-projectRoutes.get("/", (c) => {
+projectRoutes.get("/", async (c) => {
   const user = c.get("user");
-  const projects = projectRepo.findByUserId(user.id);
+  const projects = await projectRepo.findByUserId(user.id);
   return success(c, { projects }, "Projects retrieved successfully");
 });
 
 // POST /projects - Create project
-projectRoutes.post("/", zValidator("json", createProjectSchema), (c) => {
+projectRoutes.post("/", zValidator("json", createProjectSchema), async (c) => {
   const user = c.get("user");
   const data = c.req.valid("json");
   
   // Check if key already exists
-  const existing = projectRepo.findByKey(data.key);
+  const existing = await projectRepo.findByKey(data.key);
   if (existing) {
     return error(c, "Project key already exists", 400);
   }
   
-  const project = projectRepo.create({
+  const project = await projectRepo.create({
     name: data.name,
     key: data.key,
     description: data.description,
@@ -46,23 +46,23 @@ projectRoutes.post("/", zValidator("json", createProjectSchema), (c) => {
   });
   
   // Create default board
-  boardRepo.create({ project_id: project.id, name: "Main Board" });
+  await boardRepo.create({ project_id: project.id, name: "Main Board" });
   
   return success(c, { project }, "Project created successfully", 201);
 });
 
 // GET /projects/:id - Get project details
-projectRoutes.get("/:id", requireProjectMember, (c) => {
+projectRoutes.get("/:id", requireProjectMember, async (c) => {
   const projectId = parseInt(c.req.param("id"));
-  const project = projectRepo.findById(projectId);
+  const project = await projectRepo.findById(projectId);
   
   if (!project) {
     return error(c, "Project not found", 404);
   }
   
-  const members = projectRepo.getMembers(projectId);
-  const boards = boardRepo.findByProjectId(projectId);
-  const labels = labelRepo.findByProjectId(projectId);
+  const members = await projectRepo.getMembers(projectId);
+  const boards = await boardRepo.findByProjectId(projectId);
+  const labels = await labelRepo.findByProjectId(projectId);
   
   return success(c, { project, members, boards, labels }, "Project retrieved successfully");
 });
@@ -71,11 +71,11 @@ projectRoutes.get("/:id", requireProjectMember, (c) => {
 projectRoutes.patch("/:id", requireProjectAdmin, zValidator("json", z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
-})), (c) => {
+})), async (c) => {
   const projectId = parseInt(c.req.param("id"));
   const data = c.req.valid("json");
   
-  const project = projectRepo.update(projectId, data);
+  const project = await projectRepo.update(projectId, data);
   
   if (!project) {
     return error(c, "Project not found", 404);
@@ -88,26 +88,26 @@ projectRoutes.patch("/:id", requireProjectAdmin, zValidator("json", z.object({
 projectRoutes.post("/:id/members", requireProjectAdmin, zValidator("json", z.object({
   user_id: z.number(),
   role: z.enum(["admin", "member"]).default("member"),
-})), (c) => {
+})), async (c) => {
   const projectId = parseInt(c.req.param("id"));
   const { user_id, role } = c.req.valid("json");
   
-  projectRepo.addMember(projectId, user_id, role);
+  await projectRepo.addMember(projectId, user_id, role);
   
   return success(c, null, "Member added successfully");
 });
 
 // DELETE /projects/:id/members/:userId - Remove member
-projectRoutes.delete("/:id/members/:userId", requireProjectAdmin, (c) => {
+projectRoutes.delete("/:id/members/:userId", requireProjectAdmin, async (c) => {
   const projectId = parseInt(c.req.param("id"));
   const userId = parseInt(c.req.param("userId"));
   
-  const project = projectRepo.findById(projectId);
+  const project = await projectRepo.findById(projectId);
   if (project && project.owner_id === userId) {
     return error(c, "Cannot remove project owner", 400);
   }
   
-  projectRepo.removeMember(projectId, userId);
+  await projectRepo.removeMember(projectId, userId);
   
   return success(c, null, "Member removed successfully");
 });

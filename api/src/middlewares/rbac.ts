@@ -22,7 +22,7 @@ export const requireProjectMember = createMiddleware(async (c, next) => {
     return c.json({ error: "Project ID required" }, 400);
   }
   
-  const role = projectRepo.getMemberRole(projectId, user.id);
+  const role = await projectRepo.getMemberRole(projectId, user.id);
   
   if (!role) {
     return c.json({ error: "Not a member of this project" }, 403);
@@ -43,7 +43,7 @@ export const requireProjectAdmin = createMiddleware(async (c, next) => {
     return c.json({ error: "Project ID required" }, 400);
   }
   
-  const role = projectRepo.getMemberRole(projectId, user.id);
+  const role = await projectRepo.getMemberRole(projectId, user.id);
   
   if (role !== "admin") {
     return c.json({ error: "Project admin access required" }, 403);

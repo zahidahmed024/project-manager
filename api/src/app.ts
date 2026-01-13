@@ -29,12 +29,16 @@ app.get("/", (c) => {
   }, "API is running");
 });
 
-// Routes
-app.route("/auth", authRoutes);
-app.route("/projects", projectRoutes);
-app.route("/", boardRoutes);   // /projects/:projectId/boards, /boards/:id
-app.route("/", taskRoutes);    // /boards/:boardId/tasks, /tasks/:id
-app.route("/", labelRoutes);   // /projects/:projectId/labels, /labels/:id
+// API Routes
+const api = new Hono();
+api.route("/auth", authRoutes);
+api.route("/projects", projectRoutes);
+api.route("/", boardRoutes);
+api.route("/", taskRoutes);
+api.route("/", labelRoutes);
+
+// Mount API
+app.route("/api", api);
 
 // Error handling
 app.onError((err, c) => {

@@ -1,36 +1,83 @@
-import { Database } from "bun:sqlite";
+import { Kysely, sql } from "kysely";
+import type { Database } from "./types";
+import { createSqliteDialect, getRawSqliteDb } from "./dialects/sqlite";
+import { createPostgresDialect } from "./dialects/postgres";
+import { createMysqlDialect } from "./dialects/mysql";
 import { readFileSync } from "fs";
 import { join } from "path";
 
-const DB_PATH =
-  process.env.DB_PATH || join(import.meta.dir, "../../data/mini-jira.db");
+export type DbType = "sqlite" | "postgres" | "mysql";
 
-// Ensure data directory exists
-import { mkdirSync } from "fs";
-mkdirSync(join(import.meta.dir, "../../data"), { recursive: true });
+function getDbType(): DbType {
+  const dbType = process.env.DB_TYPE || "sqlite";
+  if (dbType !== "sqlite" && dbType !== "postgres" && dbType !== "mysql") {
+    throw new Error(`Invalid DB_TYPE: ${dbType}. Must be sqlite, postgres, or mysql.`);
+  }
+  return dbType;
+}
 
-export const db = new Database(DB_PATH);
+function createDialect(): Kysely<Database> {
+  const dbType = getDbType();
 
-// Enable foreign keys
-db.run("PRAGMA foreign_keys = ON");
+  switch (dbType) {
+    case "sqlite":
+      return new Kysely<Database>(createSqliteDialect());
+    case "postgres":
+      return new Kysely<Database>(createPostgresDialect());
+    case "mysql":
+      return new Kysely<Database>(createMysqlDialect());
+    default:
+      throw new Error(`Unsupported database type: ${dbType}`);
+  }
+}
 
-// Initialize schema
-export function initDb() {
-  const schemaPath = join(import.meta.dir, "schema.sql");
-  const schema = readFileSync(schemaPath, "utf-8");
-  db.run(schema);
-  console.log("✅ Database initialized");
+export const db = createDialect();
+export const dbType = getDbType();
+
+// Initialize schema based on database type
+export async function initDb() {
+  const type = getDbType();
+
+  if (type === "sqlite") {
+    // For SQLite, use the raw database to run schema SQL directly
+    const sqliteDb = getRawSqliteDb();
+    const schemaPath = join(import.meta.dir, "schema.sqlite.sql");
+    const schema = readFileSync(schemaPath, "utf-8");
+    sqliteDb.run(schema);
+    console.log("✅ SQLite database initialized");
+    // For PostgreSQL and MySQL, run the schema file
+    // The schema files use "CREATE TABLE IF NOT EXISTS", so it's safe to run multiple times
+    try {
+      const schemaPath = join(import.meta.dir, `schema.${type}.sql`);
+      const schema = readFileSync(schemaPath, "utf-8");
+      
+      // Split by semicolon to run statements individually (Kysely might not support multiple statements in one call depending on driver)
+      // But typically sql`...` works for raw queries. Let's try executing raw sql.
+      await sql.raw(schema).execute(db);
+      
+      console.log(`✅ ${type} schema initialized`);
+    } catch (error) {
+      console.error(`❌ Failed to initialize ${type} schema:`, error);
+    }
+  }
 }
 
 // Helper for transactions
-export function transaction<T>(fn: () => T): T {
-  db.run("BEGIN");
-  try {
-    const result = fn();
-    db.run("COMMIT");
-    return result;
-  } catch (error) {
-    db.run("ROLLBACK");
-    throw error;
+export async function transaction<T>(fn: (trx: Kysely<Database>) => Promise<T>): Promise<T> {
+  return await db.transaction().execute(fn);
+}
+
+// Helper to get the current timestamp SQL for the database type
+export function currentTimestamp() {
+  const type = getDbType();
+  switch (type) {
+    case "sqlite":
+      return sql`CURRENT_TIMESTAMP`;
+    case "postgres":
+      return sql`NOW()`;
+    case "mysql":
+      return sql`NOW()`;
+    default:
+      return sql`CURRENT_TIMESTAMP`;
   }
 }

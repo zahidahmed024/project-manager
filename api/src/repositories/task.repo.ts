@@ -1,27 +1,13 @@
 import { db } from "../db/client";
+import type { Task } from "../db/types";
+
+export type { Task };
 
 export type TaskType = "issue" | "bugfix" | "story" | "subtask";
 export type TaskStatus = string;
 export type TaskPriority = "high" | "medium" | "low";
 
-export interface Task {
-  id: number;
-  board_id: number;
-  type: TaskType;
-  title: string;
-  description: string | null;
-  status: TaskStatus;
-  priority: TaskPriority;
-  assignee_id: number | null;
-  reporter_id: number;
-  parent_id: number | null;
-  deadline: string | null;
-  position: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface TaskCreate {
+export type TaskCreate = {
   board_id: number;
   type: TaskType;
   title: string;
@@ -32,9 +18,9 @@ export interface TaskCreate {
   reporter_id: number;
   parent_id?: number;
   deadline?: string;
-}
+};
 
-export interface TaskUpdate {
+export type TaskUpdate = {
   title?: string;
   description?: string;
   status?: TaskStatus;
@@ -42,114 +28,110 @@ export interface TaskUpdate {
   assignee_id?: number | null;
   deadline?: string | null;
   position?: number;
-}
+};
 
 export const taskRepo = {
-  create(data: TaskCreate): Task {
+  async create(data: TaskCreate): Promise<Task> {
     // Get max position for the board
-    const maxPos = db.query(`
-      SELECT COALESCE(MAX(position), -1) as pos FROM tasks WHERE board_id = $board_id
-    `).get({ $board_id: data.board_id }) as { pos: number };
-    
-    const stmt = db.prepare(`
-      INSERT INTO tasks (board_id, type, title, description, status, priority, assignee_id, reporter_id, parent_id, deadline, position)
-      VALUES ($board_id, $type, $title, $description, $status, $priority, $assignee_id, $reporter_id, $parent_id, $deadline, $position)
-    `);
-    stmt.run({
-      $board_id: data.board_id,
-      $type: data.type,
-      $title: data.title,
-      $description: data.description || null,
-      $status: data.status || "todo",
-      $priority: data.priority || "medium",
-      $assignee_id: data.assignee_id || null,
-      $reporter_id: data.reporter_id,
-      $parent_id: data.parent_id || null,
-      $deadline: data.deadline || null,
-      $position: maxPos.pos + 1,
-    });
-    
-    const lastId = db.query("SELECT last_insert_rowid() as id").get() as { id: number };
-    return this.findById(lastId.id)!;
+    const maxPosResult = await db
+      .selectFrom("tasks")
+      .select(db.fn.max("position").as("pos"))
+      .where("board_id", "=", data.board_id)
+      .executeTakeFirst();
+
+    const position = (maxPosResult?.pos ?? -1) + 1;
+
+    const result = await db
+      .insertInto("tasks")
+      .values({
+        board_id: data.board_id,
+        type: data.type,
+        title: data.title,
+        description: data.description ?? null,
+        status: data.status || "todo",
+        priority: data.priority || "medium",
+        assignee_id: data.assignee_id ?? null,
+        reporter_id: data.reporter_id,
+        parent_id: data.parent_id ?? null,
+        deadline: data.deadline ?? null,
+        position: position,
+      })
+      .returningAll()
+      .executeTakeFirst();
+
+    if (!result) {
+      const lastId = await db
+        .selectFrom("tasks")
+        .select(db.fn.max("id").as("id"))
+        .executeTakeFirst();
+      return (await this.findById(lastId?.id ?? 0))!;
+    }
+
+    return result;
   },
 
-  findById(id: number): Task | null {
-    const stmt = db.prepare("SELECT * FROM tasks WHERE id = $id");
-    return stmt.get({ $id: id }) as Task | null;
+  async findById(id: number): Promise<Task | null> {
+    const result = await db
+      .selectFrom("tasks")
+      .selectAll()
+      .where("id", "=", id)
+      .executeTakeFirst();
+
+    return result ?? null;
   },
 
-  findByBoardId(boardId: number): Task[] {
-    const stmt = db.prepare(`
-      SELECT * FROM tasks WHERE board_id = $board_id AND parent_id IS NULL
-      ORDER BY position
-    `);
-    return stmt.all({ $board_id: boardId }) as Task[];
+  async findByBoardId(boardId: number): Promise<Task[]> {
+    return await db
+      .selectFrom("tasks")
+      .selectAll()
+      .where("board_id", "=", boardId)
+      .where("parent_id", "is", null)
+      .orderBy("position")
+      .execute();
   },
 
-  getSubtasks(parentId: number): Task[] {
-    const stmt = db.prepare("SELECT * FROM tasks WHERE parent_id = $parent_id ORDER BY position");
-    return stmt.all({ $parent_id: parentId }) as Task[];
+  async getSubtasks(parentId: number): Promise<Task[]> {
+    return await db
+      .selectFrom("tasks")
+      .selectAll()
+      .where("parent_id", "=", parentId)
+      .orderBy("position")
+      .execute();
   },
 
-  update(id: number, data: TaskUpdate): Task | null {
-    const updates: string[] = [];
-    const params: Record<string, unknown> = { $id: id };
-    
-    if (data.title !== undefined) {
-      updates.push("title = $title");
-      params.$title = data.title;
+  async update(id: number, data: TaskUpdate): Promise<Task | null> {
+    if (Object.keys(data).length === 0) {
+      return this.findById(id);
     }
-    if (data.description !== undefined) {
-      updates.push("description = $description");
-      params.$description = data.description;
-    }
-    if (data.status !== undefined) {
-      updates.push("status = $status");
-      params.$status = data.status;
-    }
-    if (data.priority !== undefined) {
-      updates.push("priority = $priority");
-      params.$priority = data.priority;
-    }
-    if (data.assignee_id !== undefined) {
-      updates.push("assignee_id = $assignee_id");
-      params.$assignee_id = data.assignee_id;
-    }
-    if (data.deadline !== undefined) {
-      updates.push("deadline = $deadline");
-      params.$deadline = data.deadline;
-    }
-    if (data.position !== undefined) {
-      updates.push("position = $position");
-      params.$position = data.position;
-    }
-    
-    if (updates.length === 0) return this.findById(id);
-    
-    updates.push("updated_at = CURRENT_TIMESTAMP");
-    
-    const stmt = db.prepare(`UPDATE tasks SET ${updates.join(", ")} WHERE id = $id`);
-    stmt.run(params as any);
-    
+
+    await db
+      .updateTable("tasks")
+      .set({
+        ...data,
+        updated_at: new Date().toISOString(),
+      })
+      .where("id", "=", id)
+      .execute();
+
     return this.findById(id);
   },
 
-  delete(id: number): void {
-    const stmt = db.prepare("DELETE FROM tasks WHERE id = $id");
-    stmt.run({ $id: id });
+  async delete(id: number): Promise<void> {
+    await db.deleteFrom("tasks").where("id", "=", id).execute();
   },
 
   // Get task with labels
-  findByIdWithLabels(id: number): (Task & { labels: { id: number; name: string; color: string }[] }) | null {
-    const task = this.findById(id);
+  async findByIdWithLabels(id: number): Promise<(Task & { labels: { id: number; name: string; color: string }[] }) | null> {
+    const task = await this.findById(id);
     if (!task) return null;
-    
-    const labels = db.query(`
-      SELECT l.id, l.name, l.color FROM labels l
-      INNER JOIN task_labels tl ON l.id = tl.label_id
-      WHERE tl.task_id = $task_id
-    `).all({ $task_id: id }) as { id: number; name: string; color: string }[];
-    
+
+    const labels = await db
+      .selectFrom("labels as l")
+      .innerJoin("task_labels as tl", "l.id", "tl.label_id")
+      .select(["l.id", "l.name", "l.color"])
+      .where("tl.task_id", "=", id)
+      .execute();
+
     return { ...task, labels };
   },
 };

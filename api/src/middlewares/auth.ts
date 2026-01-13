@@ -29,7 +29,7 @@ export const authMiddleware = createMiddleware(async (c, next) => {
     return c.json({ error: "Invalid or expired token" }, 401);
   }
   
-  const user = userRepo.findById(parseInt(payload.sub));
+  const user = await userRepo.findById(parseInt(payload.sub));
   
   if (!user) {
     return c.json({ error: "User not found" }, 401);

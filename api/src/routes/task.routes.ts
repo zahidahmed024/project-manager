@@ -8,6 +8,7 @@ import { commentRepo } from "../repositories/comment.repo";
 import { labelRepo } from "../repositories/label.repo";
 import { authMiddleware } from "../middlewares/auth";
 import { success, error } from "../utils/response";
+import type { Board } from "../repositories/board.repo";
 
 const taskRoutes = new Hono();
 
@@ -37,39 +38,39 @@ const updateTaskSchema = z.object({
 });
 
 // Helper to check board access
-function checkBoardAccess(boardId: number, userId: number): { board: ReturnType<typeof boardRepo.findById>; role: string | null } {
-  const board = boardRepo.findById(boardId);
+async function checkBoardAccess(boardId: number, userId: number): Promise<{ board: Board | null; role: string | null }> {
+  const board = await boardRepo.findById(boardId);
   if (!board) {
     return { board: null, role: null };
   }
-  const role = projectRepo.getMemberRole(board.project_id, userId);
+  const role = await projectRepo.getMemberRole(board.project_id, userId);
   return { board, role };
 }
 
 // GET /boards/:boardId/tasks - List tasks
-taskRoutes.get("/boards/:boardId/tasks", (c) => {
+taskRoutes.get("/boards/:boardId/tasks", async (c) => {
   const user = c.get("user");
   const boardId = parseInt(c.req.param("boardId"));
   
-  const { board, role } = checkBoardAccess(boardId, user.id);
+  const { board, role } = await checkBoardAccess(boardId, user.id);
   if (!board) return error(c, "Board not found", 404);
   if (!role) return error(c, "Not a member of this project", 403);
   
-  const tasks = taskRepo.findByBoardId(boardId);
+  const tasks = await taskRepo.findByBoardId(boardId);
   return success(c, { tasks }, "Tasks retrieved successfully");
 });
 
 // POST /boards/:boardId/tasks - Create task
-taskRoutes.post("/boards/:boardId/tasks", zValidator("json", createTaskSchema), (c) => {
+taskRoutes.post("/boards/:boardId/tasks", zValidator("json", createTaskSchema), async (c) => {
   const user = c.get("user");
   const boardId = parseInt(c.req.param("boardId"));
   const data = c.req.valid("json");
   
-  const { board, role } = checkBoardAccess(boardId, user.id);
+  const { board, role } = await checkBoardAccess(boardId, user.id);
   if (!board) return error(c, "Board not found", 404);
   if (!role) return error(c, "Not a member of this project", 403);
   
-  const task = taskRepo.create({
+  const task = await taskRepo.create({
     board_id: boardId,
     type: data.type,
     title: data.title,
@@ -85,47 +86,47 @@ taskRoutes.post("/boards/:boardId/tasks", zValidator("json", createTaskSchema), 
 });
 
 // GET /tasks/:id - Get task with subtasks and labels
-taskRoutes.get("/tasks/:id", (c) => {
+taskRoutes.get("/tasks/:id", async (c) => {
   const user = c.get("user");
   const taskId = parseInt(c.req.param("id"));
   
-  const task = taskRepo.findByIdWithLabels(taskId);
+  const task = await taskRepo.findByIdWithLabels(taskId);
   if (!task) return error(c, "Task not found", 404);
   
-  const { role } = checkBoardAccess(task.board_id, user.id);
+  const { role } = await checkBoardAccess(task.board_id, user.id);
   if (!role) return error(c, "Not a member of this project", 403);
   
-  const subtasks = taskRepo.getSubtasks(taskId);
-  const comments = commentRepo.findByTaskId(taskId);
+  const subtasks = await taskRepo.getSubtasks(taskId);
+  const comments = await commentRepo.findByTaskId(taskId);
   
   return success(c, { task, subtasks, comments }, "Task retrieved successfully");
 });
 
 // PATCH /tasks/:id - Update task
-taskRoutes.patch("/tasks/:id", zValidator("json", updateTaskSchema), (c) => {
+taskRoutes.patch("/tasks/:id", zValidator("json", updateTaskSchema), async (c) => {
   const user = c.get("user");
   const taskId = parseInt(c.req.param("id"));
   const data = c.req.valid("json");
   
-  const task = taskRepo.findById(taskId);
+  const task = await taskRepo.findById(taskId);
   if (!task) return error(c, "Task not found", 404);
   
-  const { role } = checkBoardAccess(task.board_id, user.id);
+  const { role } = await checkBoardAccess(task.board_id, user.id);
   if (!role) return error(c, "Not a member of this project", 403);
   
-  const updated = taskRepo.update(taskId, data);
+  const updated = await taskRepo.update(taskId, data);
   return success(c, { task: updated }, "Task updated successfully");
 });
 
 // DELETE /tasks/:id - Delete task
-taskRoutes.delete("/tasks/:id", (c) => {
+taskRoutes.delete("/tasks/:id", async (c) => {
   const user = c.get("user");
   const taskId = parseInt(c.req.param("id"));
   
-  const task = taskRepo.findById(taskId);
+  const task = await taskRepo.findById(taskId);
   if (!task) return error(c, "Task not found", 404);
   
-  const { role } = checkBoardAccess(task.board_id, user.id);
+  const { role } = await checkBoardAccess(task.board_id, user.id);
   if (!role) return error(c, "Not a member of this project", 403);
   
   // Only admin or reporter can delete
@@ -133,23 +134,23 @@ taskRoutes.delete("/tasks/:id", (c) => {
     return error(c, "Only admin or task creator can delete", 403);
   }
   
-  taskRepo.delete(taskId);
+  await taskRepo.delete(taskId);
   return success(c, null, "Task deleted successfully");
 });
 
 // POST /tasks/:id/subtasks - Create subtask
-taskRoutes.post("/tasks/:id/subtasks", zValidator("json", createTaskSchema.omit({ type: true })), (c) => {
+taskRoutes.post("/tasks/:id/subtasks", zValidator("json", createTaskSchema.omit({ type: true })), async (c) => {
   const user = c.get("user");
   const parentId = parseInt(c.req.param("id"));
   const data = c.req.valid("json");
   
-  const parent = taskRepo.findById(parentId);
+  const parent = await taskRepo.findById(parentId);
   if (!parent) return error(c, "Parent task not found", 404);
   
-  const { role } = checkBoardAccess(parent.board_id, user.id);
+  const { role } = await checkBoardAccess(parent.board_id, user.id);
   if (!role) return error(c, "Not a member of this project", 403);
   
-  const subtask = taskRepo.create({
+  const subtask = await taskRepo.create({
     board_id: parent.board_id,
     type: "subtask",
     title: data.title,
@@ -166,67 +167,67 @@ taskRoutes.post("/tasks/:id/subtasks", zValidator("json", createTaskSchema.omit(
 });
 
 // POST /tasks/:id/labels/:labelId - Add label to task
-taskRoutes.post("/tasks/:id/labels/:labelId", (c) => {
+taskRoutes.post("/tasks/:id/labels/:labelId", async (c) => {
   const user = c.get("user");
   const taskId = parseInt(c.req.param("id"));
   const labelId = parseInt(c.req.param("labelId"));
   
-  const task = taskRepo.findById(taskId);
+  const task = await taskRepo.findById(taskId);
   if (!task) return error(c, "Task not found", 404);
   
-  const { role } = checkBoardAccess(task.board_id, user.id);
+  const { role } = await checkBoardAccess(task.board_id, user.id);
   if (!role) return error(c, "Not a member of this project", 403);
   
-  labelRepo.addToTask(taskId, labelId);
+  await labelRepo.addToTask(taskId, labelId);
   return success(c, null, "Label added successfully");
 });
 
 // DELETE /tasks/:id/labels/:labelId - Remove label from task
-taskRoutes.delete("/tasks/:id/labels/:labelId", (c) => {
+taskRoutes.delete("/tasks/:id/labels/:labelId", async (c) => {
   const user = c.get("user");
   const taskId = parseInt(c.req.param("id"));
   const labelId = parseInt(c.req.param("labelId"));
   
-  const task = taskRepo.findById(taskId);
+  const task = await taskRepo.findById(taskId);
   if (!task) return error(c, "Task not found", 404);
   
-  const { role } = checkBoardAccess(task.board_id, user.id);
+  const { role } = await checkBoardAccess(task.board_id, user.id);
   if (!role) return error(c, "Not a member of this project", 403);
   
-  labelRepo.removeFromTask(taskId, labelId);
+  await labelRepo.removeFromTask(taskId, labelId);
   return success(c, null, "Label removed successfully");
 });
 
 // GET /tasks/:id/comments - List comments
-taskRoutes.get("/tasks/:id/comments", (c) => {
+taskRoutes.get("/tasks/:id/comments", async (c) => {
   const user = c.get("user");
   const taskId = parseInt(c.req.param("id"));
   
-  const task = taskRepo.findById(taskId);
+  const task = await taskRepo.findById(taskId);
   if (!task) return error(c, "Task not found", 404);
   
-  const { role } = checkBoardAccess(task.board_id, user.id);
+  const { role } = await checkBoardAccess(task.board_id, user.id);
   if (!role) return error(c, "Not a member of this project", 403);
   
-  const comments = commentRepo.findByTaskId(taskId);
+  const comments = await commentRepo.findByTaskId(taskId);
   return success(c, { comments }, "Comments retrieved successfully");
 });
 
 // POST /tasks/:id/comments - Add comment
 taskRoutes.post("/tasks/:id/comments", zValidator("json", z.object({
   content: z.string().min(1),
-})), (c) => {
+})), async (c) => {
   const user = c.get("user");
   const taskId = parseInt(c.req.param("id"));
   const { content } = c.req.valid("json");
   
-  const task = taskRepo.findById(taskId);
+  const task = await taskRepo.findById(taskId);
   if (!task) return error(c, "Task not found", 404);
   
-  const { role } = checkBoardAccess(task.board_id, user.id);
+  const { role } = await checkBoardAccess(task.board_id, user.id);
   if (!role) return error(c, "Not a member of this project", 403);
   
-  const comment = commentRepo.create({
+  const comment = await commentRepo.create({
     task_id: taskId,
     author_id: user.id,
     content,

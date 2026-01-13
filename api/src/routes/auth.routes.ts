@@ -31,14 +31,14 @@ authRoutes.post("/register", zValidator("json", registerSchema), async (c) => {
   const { email, password, name } = c.req.valid("json");
   
   // Check if user exists
-  const existing = userRepo.findByEmail(email);
+  const existing = await userRepo.findByEmail(email);
   if (existing) {
     return error(c, "Email already registered", 400);
   }
   
   // Create user
   const passwordHash = await hashPassword(password);
-  const user = userRepo.create({ email, password_hash: passwordHash, name });
+  const user = await userRepo.create({ email, password_hash: passwordHash, name });
   
   // Generate tokens
   const tokenPayload = {
@@ -65,7 +65,7 @@ authRoutes.post("/register", zValidator("json", registerSchema), async (c) => {
 authRoutes.post("/login", zValidator("json", loginSchema), async (c) => {
   const { email, password } = c.req.valid("json");
   
-  const user = userRepo.findByEmail(email);
+  const user = await userRepo.findByEmail(email);
   if (!user) {
     return error(c, "Invalid credentials", 401);
   }
@@ -105,7 +105,7 @@ authRoutes.post("/refresh", zValidator("json", refreshSchema), async (c) => {
   }
   
   // Get user to ensure they still exist
-  const user = userRepo.findById(parseInt(payload.sub));
+  const user = await userRepo.findById(parseInt(payload.sub));
   if (!user) {
     return error(c, "User not found", 401);
   }
@@ -128,8 +128,8 @@ authRoutes.get("/me", authMiddleware, (c) => {
 });
 
 // GET /auth/users - List all users (for member selection)
-authRoutes.get("/users", authMiddleware, (c) => {
-  const users = userRepo.findAll().map(u => ({
+authRoutes.get("/users", authMiddleware, async (c) => {
+  const users = (await userRepo.findAll()).map(u => ({
     id: u.id,
     email: u.email,
     name: u.name,

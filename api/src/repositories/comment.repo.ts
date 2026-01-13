@@ -1,52 +1,70 @@
 import { db } from "../db/client";
+import type { Comment } from "../db/types";
 
-export interface Comment {
-  id: number;
+export type { Comment };
+
+export type CommentCreate = {
   task_id: number;
   author_id: number;
   content: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export type CommentCreate = Pick<Comment, "task_id" | "author_id" | "content">;
+};
 
 export const commentRepo = {
-  create(data: CommentCreate): Comment {
-    const stmt = db.prepare(`
-      INSERT INTO comments (task_id, author_id, content)
-      VALUES ($task_id, $author_id, $content)
-    `);
-    stmt.run({
-      $task_id: data.task_id,
-      $author_id: data.author_id,
-      $content: data.content,
-    });
-    
-    const lastId = db.query("SELECT last_insert_rowid() as id").get() as { id: number };
-    return this.findById(lastId.id)!;
+  async create(data: CommentCreate): Promise<Comment> {
+    const result = await db
+      .insertInto("comments")
+      .values({
+        task_id: data.task_id,
+        author_id: data.author_id,
+        content: data.content,
+      })
+      .returningAll()
+      .executeTakeFirst();
+
+    if (!result) {
+      const lastId = await db
+        .selectFrom("comments")
+        .select(db.fn.max("id").as("id"))
+        .executeTakeFirst();
+      return (await this.findById(lastId?.id ?? 0))!;
+    }
+
+    return result;
   },
 
-  findById(id: number): Comment | null {
-    const stmt = db.prepare("SELECT * FROM comments WHERE id = $id");
-    return stmt.get({ $id: id }) as Comment | null;
+  async findById(id: number): Promise<Comment | null> {
+    const result = await db
+      .selectFrom("comments")
+      .selectAll()
+      .where("id", "=", id)
+      .executeTakeFirst();
+
+    return result ?? null;
   },
 
-  findByTaskId(taskId: number): Comment[] {
-    const stmt = db.prepare("SELECT * FROM comments WHERE task_id = $task_id ORDER BY created_at");
-    return stmt.all({ $task_id: taskId }) as Comment[];
+  async findByTaskId(taskId: number): Promise<Comment[]> {
+    return await db
+      .selectFrom("comments")
+      .selectAll()
+      .where("task_id", "=", taskId)
+      .orderBy("created_at")
+      .execute();
   },
 
-  update(id: number, content: string): Comment | null {
-    const stmt = db.prepare(`
-      UPDATE comments SET content = $content, updated_at = CURRENT_TIMESTAMP WHERE id = $id
-    `);
-    stmt.run({ $id: id, $content: content });
+  async update(id: number, content: string): Promise<Comment | null> {
+    await db
+      .updateTable("comments")
+      .set({
+        content,
+        updated_at: new Date().toISOString(),
+      })
+      .where("id", "=", id)
+      .execute();
+
     return this.findById(id);
   },
 
-  delete(id: number): void {
-    const stmt = db.prepare("DELETE FROM comments WHERE id = $id");
-    stmt.run({ $id: id });
+  async delete(id: number): Promise<void> {
+    await db.deleteFrom("comments").where("id", "=", id).execute();
   },
 };
