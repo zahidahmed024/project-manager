@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import type { TaskDetail, Comment } from "~/composables/useTasks";
 import type { Task } from "~/composables/useBoards";
+import type { ProjectMember } from "~/composables/useProjects";
 
 const route = useRoute();
 const taskId = parseInt(route.params.id as string);
 
 const { getTask, updateTask, addComment, createSubtask } = useTasks();
+const { getBoard } = useBoards();
+const { getProject } = useProjects();
 const { initAuth, user } = useAuth();
 
 const taskData = ref<TaskDetail | null>(null);
+const members = ref<ProjectMember[]>([]);
 const loading = ref(true);
 const error = ref("");
 
@@ -19,6 +23,9 @@ const editForm = reactive({
   description: "",
   status: "todo" as "todo" | "in_progress" | "done",
   priority: "medium" as "high" | "medium" | "low",
+  assignee_id: null as number | null,
+  deadline: null as string | null,
+  time_spent: 0,
 });
 
 // Comment
@@ -55,6 +62,13 @@ const loadTask = async () => {
   try {
     await initAuth();
     taskData.value = await getTask(taskId);
+    
+    // Fetch project members for assignee selection
+    if (taskData.value) {
+      const boardData = await getBoard(taskData.value.task.board_id);
+      const projectData = await getProject(boardData.board.project_id);
+      members.value = projectData.members;
+    }
   } catch (e: any) {
     error.value = e.message || "Failed to load task";
   } finally {
@@ -68,6 +82,9 @@ const startEditing = () => {
     editForm.description = taskData.value.task.description || "";
     editForm.status = taskData.value.task.status as "todo" | "in_progress" | "done";
     editForm.priority = taskData.value.task.priority;
+    editForm.assignee_id = taskData.value.task.assignee_id || null;
+    editForm.deadline = taskData.value.task.deadline || null;
+    editForm.time_spent = taskData.value.task.time_spent || 0;
     isEditing.value = true;
   }
 };
@@ -81,6 +98,9 @@ const saveChanges = async () => {
       description: editForm.description,
       status: editForm.status,
       priority: editForm.priority,
+      assignee_id: editForm.assignee_id,
+      deadline: editForm.deadline,
+      time_spent: editForm.time_spent,
     });
     taskData.value.task = { ...taskData.value.task, ...updated };
     isEditing.value = false;
@@ -135,7 +155,13 @@ const toggleSubtask = async (subtask: Task) => {
 };
 
 const formatDate = (dateString: string) => {
+  if (!dateString) return "";
   return new Date(dateString).toLocaleString();
+};
+
+const getMemberName = (userId: number) => {
+  const member = members.value.find(m => m.user_id === userId);
+  return member?.name || "Unknown";
 };
 
 onMounted(loadTask);
@@ -397,10 +423,61 @@ onMounted(loadTask);
           </div>
 
           <div class="sidebar-section">
-            <h4 class="sidebar-label">Created</h4>
-            <span class="text-secondary text-sm">{{
-              formatDate(taskData.task.created_at)
-            }}</span>
+            <h4 class="sidebar-label">Created By</h4>
+            <div class="user-info">
+              <div class="user-avatar">
+                {{ getMemberName(taskData.task.reporter_id).charAt(0).toUpperCase() }}
+              </div>
+              <span class="user-name">{{ getMemberName(taskData.task.reporter_id) }}</span>
+            </div>
+            <div class="text-secondary text-xs mt-1">
+              {{ formatDate(taskData.task.created_at) }}
+            </div>
+          </div>
+
+          <div class="sidebar-section">
+            <h4 class="sidebar-label">Assignee</h4>
+            <select v-if="isEditing" v-model="editForm.assignee_id" class="w-full">
+              <option :value="null">Unassigned</option>
+              <option v-for="member in members" :key="member.user_id" :value="member.user_id">
+                {{ member.name }}
+              </option>
+            </select>
+            <div v-else class="user-info">
+              <div v-if="taskData.task.assignee_id" class="user-avatar">
+                {{ getMemberName(taskData.task.assignee_id).charAt(0).toUpperCase() }}
+              </div>
+              <span class="user-name">
+                {{ taskData.task.assignee_id ? getMemberName(taskData.task.assignee_id) : "Unassigned" }}
+              </span>
+            </div>
+          </div>
+
+          <div class="sidebar-section">
+            <h4 class="sidebar-label">Deadline</h4>
+            <input 
+              v-if="isEditing" 
+              v-model="editForm.deadline" 
+              type="datetime-local" 
+              class="w-full"
+            />
+            <span v-else class="text-sm">
+              {{ taskData.task.deadline ? formatDate(taskData.task.deadline) : "No deadline" }}
+            </span>
+          </div>
+
+          <div class="sidebar-section">
+            <h4 class="sidebar-label">Time Spent (min)</h4>
+            <input 
+              v-if="isEditing" 
+              v-model="editForm.time_spent" 
+              type="number" 
+              min="0"
+              class="w-full"
+            />
+            <span v-else class="text-sm">
+              {{ taskData.task.time_spent || 0 }} minutes
+            </span>
           </div>
 
           <div v-if="isEditing" class="sidebar-actions">
@@ -687,5 +764,29 @@ onMounted(loadTask);
 .form-group {
   display: flex;
   flex-direction: column;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.user-avatar {
+  width: 24px;
+  height: 24px;
+  background-color: var(--color-accent);
+  color: white;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.user-name {
+  font-size: 0.875rem;
+  color: var(--color-text-primary);
 }
 </style>

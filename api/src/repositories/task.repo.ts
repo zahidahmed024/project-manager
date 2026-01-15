@@ -18,6 +18,7 @@ export type TaskCreate = {
   reporter_id: number;
   parent_id?: number;
   deadline?: string;
+  time_spent?: number;
 };
 
 export type TaskUpdate = {
@@ -27,6 +28,7 @@ export type TaskUpdate = {
   priority?: TaskPriority;
   assignee_id?: number | null;
   deadline?: string | null;
+  time_spent?: number;
   position?: number;
 };
 
@@ -54,6 +56,7 @@ export const taskRepo = {
         reporter_id: data.reporter_id,
         parent_id: data.parent_id ?? null,
         deadline: data.deadline ?? null,
+        time_spent: 0,
         position: position,
       })
       .returningAll()

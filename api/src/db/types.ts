@@ -78,6 +78,7 @@ export interface TasksTable {
   reporter_id: number;
   parent_id: number | null;
   deadline: string | null;
+  time_spent: number | null;
   position: number;
   created_at: Generated<string>;
   updated_at: Generated<string>;

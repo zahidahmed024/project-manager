@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     reporter_id INTEGER NOT NULL,
     parent_id INTEGER,
     deadline DATETIME,
+    time_spent INTEGER DEFAULT 0,
     position INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,

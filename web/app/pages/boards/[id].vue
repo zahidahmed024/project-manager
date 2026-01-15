@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import type { Task, BoardWithTasks, BoardColumn } from "~/composables/useBoards";
 import type { CreateTaskData } from "~/composables/useTasks";
+import type { ProjectMember } from "~/composables/useProjects";
 
 const route = useRoute();
 const boardId = parseInt(route.params.id as string);
 
 const { getBoard, createColumn, updateColumn, deleteColumn } = useBoards();
 const { createTask, updateTask } = useTasks();
+const { getProject } = useProjects();
 const { initAuth } = useAuth();
 
 const boardData = ref<BoardWithTasks | null>(null);
+const members = ref<ProjectMember[]>([]);
+const filterByUser = ref<number | null>(null);
 const loading = ref(true);
 const error = ref("");
 
@@ -51,9 +55,13 @@ const typeLabels = {
 // Get columns from boardData
 const columns = computed(() => boardData.value?.columns || []);
 
-// Group tasks by column name (status)
+// Group tasks by column name (status) with optional user filter
 const getTasksForColumn = (columnName: string) => {
-  return (boardData.value?.tasks || []).filter(t => t.status === columnName);
+  let tasks = (boardData.value?.tasks || []).filter(t => t.status === columnName);
+  if (filterByUser.value !== null) {
+    tasks = tasks.filter(t => t.assignee_id === filterByUser.value);
+  }
+  return tasks;
 };
 
 const loadBoard = async () => {
@@ -62,6 +70,12 @@ const loadBoard = async () => {
   try {
     await initAuth();
     boardData.value = await getBoard(boardId);
+    
+    // Fetch project members for filter
+    if (boardData.value) {
+      const projectData = await getProject(boardData.value.board.project_id);
+      members.value = projectData.members;
+    }
   } catch (e: any) {
     error.value = e.message || "Failed to load board";
   } finally {
@@ -201,6 +215,17 @@ onMounted(loadBoard);
       <!-- Board header -->
       <div class="board-header">
         <h1 class="board-title">{{ boardData.board.name }}</h1>
+        
+        <div class="board-filters">
+          <label class="filter-label">Filter by Assignee:</label>
+          <select v-model="filterByUser" class="filter-select">
+            <option :value="null">All Users</option>
+            <option v-for="member in members" :key="member.user_id" :value="member.user_id">
+              {{ member.name }}
+            </option>
+          </select>
+        </div>
+
         <button class="btn btn-primary" @click="showTaskModal = true">
           <svg
             width="16"
@@ -530,6 +555,27 @@ onMounted(loadBoard);
 .board-title {
   font-size: 1.5rem;
   font-weight: 600;
+}
+
+.board-filters {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.filter-label {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.filter-select {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  font-size: 0.875rem;
+  min-width: 150px;
 }
 
 /* Kanban Board */

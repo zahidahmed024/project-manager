@@ -29,7 +29,9 @@ export interface CreateTaskData {
   status?: string;
   priority?: 'high' | 'medium' | 'low';
   assignee_id?: number;
+  reporter_id?: number; // Optional on frontend create, but required in backend
   deadline?: string;
+  time_spent?: number;
 }
 
 export interface UpdateTaskData {
@@ -39,6 +41,7 @@ export interface UpdateTaskData {
   priority?: 'high' | 'medium' | 'low';
   assignee_id?: number | null;
   deadline?: string | null;
+  time_spent?: number;
   position?: number;
 }
 

@@ -23,6 +23,7 @@ export interface Task {
   parent_id?: number;
   position: number;
   deadline?: string;
+  time_spent?: number;
   created_at: string;
   subtasks?: Task[];
 }
